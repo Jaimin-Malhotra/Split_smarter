@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, query, where, getDocs, writeBatch, deleteDoc, updateDoc, arrayUnion, orderBy } from 'firebase/firestore';
 import { ArrowRight, Users, IndianRupee, LogOut, PlusCircle, Trash2, Sun, Moon, Eye, X, UserPlus, Receipt, History } from 'lucide-react';
 
-// --- Firebase Configuration ---
+// --- Firebase Configuration for Vercel ---
+// This uses the Environment Variables you set up on Vercel.
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_API_KEY,
   authDomain: process.env.REACT_APP_AUTH_DOMAIN,
@@ -14,7 +15,7 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_APP_ID
 };
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-splitwise-app';
+const appId = 'split-smarter-live'; // A fixed ID for your live app
 
 // --- Firebase Initialization ---
 const app = initializeApp(firebaseConfig);
@@ -22,6 +23,16 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 // --- Helper & UI Components ---
+
+const GoogleLogo = () => (
+    <svg className="w-6 h-6 mr-3" viewBox="0 0 48 48">
+        <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path>
+        <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path>
+        <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"></path>
+        <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C42.022,36.218,44,30.556,44,24C44,22.659,43.862,21.35,43.611,20.083z"></path>
+    </svg>
+);
+
 
 const Logo = () => (
     <div className="flex items-center space-x-3">
@@ -88,30 +99,30 @@ const ThemeToggle = ({ theme, setTheme }) => {
 
 // --- Main Application Components ---
 
-const LoginScreen = ({ onLogin }) => {
-    const [username, setUsername] = useState('');
+const LoginScreen = () => {
     const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
 
-    const handleLogin = async (e) => {
-        if (e) e.preventDefault();
-        if (!username.trim()) {
-            alert("Please enter a username.");
-            return;
-        }
+    const handleGoogleLogin = async () => {
         setIsLoading(true);
+        setError('');
+        const provider = new GoogleAuthProvider();
         try {
-            const credential = typeof __initial_auth_token !== 'undefined' && __initial_auth_token
-                ? await signInWithCustomToken(auth, __initial_auth_token)
-                : await signInAnonymously(auth);
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
             
-            const user = credential.user;
+            // Create or update user document in Firestore
             const userDocRef = doc(db, `/artifacts/${appId}/public/data/users`, user.uid);
-            await setDoc(userDocRef, { username: username.trim(), uid: user.uid });
+            await setDoc(userDocRef, { 
+                username: user.displayName, 
+                email: user.email,
+                uid: user.uid 
+            }, { merge: true }); // merge: true prevents overwriting data on re-login
             
-            onLogin(user, username.trim());
+            // onAuthStateChanged in App component will handle the rest
         } catch (error) {
-            console.error("Login failed:", error);
-            alert("Login failed. Please try again.");
+            console.error("Google login failed:", error);
+            setError("Failed to sign in with Google. Please try again.");
             setIsLoading(false);
         }
     };
@@ -123,27 +134,23 @@ const LoginScreen = ({ onLogin }) => {
                     <Logo />
                     <p className="text-gray-500 dark:text-gray-400 mt-2">The simplest way to split expenses.</p>
                 </div>
-                <form onSubmit={handleLogin} className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700">
-                    <h2 className="text-2xl font-bold mb-6">Enter Your Name</h2>
-                    <input
-                        type="text"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        placeholder="Your Name"
-                        className="w-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white px-4 py-3 rounded-lg mb-6 focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                    />
+                <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700">
+                    <h2 className="text-2xl font-bold mb-6">Welcome!</h2>
+                    <p className="text-gray-600 dark:text-gray-400 mb-8">Sign in to manage your shared expenses.</p>
                     <button
-                        type="submit"
+                        onClick={handleGoogleLogin}
                         disabled={isLoading}
-                        className="w-full bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 text-white font-bold py-3 px-4 rounded-lg flex justify-center items-center transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-white dark:bg-gray-700 text-gray-800 dark:text-white font-bold py-3 px-4 rounded-lg flex justify-center items-center transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
                     >
-                        {isLoading ? <Spinner /> : "Continue"}
+                        {isLoading ? <Spinner /> : <><GoogleLogo /> Sign in with Google</>}
                     </button>
-                </form>
+                    {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
+                </div>
             </div>
         </div>
     );
 };
+
 
 const GroupSetupModal = ({ onGroupCreated, onClose, user }) => {
     const [members, setMembers] = useState(['']);
@@ -218,7 +225,7 @@ const GroupSetupModal = ({ onGroupCreated, onClose, user }) => {
     );
 };
 
-const GroupHub = ({ user, onSelectGroup, onLogout, theme, setTheme }) => {
+const GroupHub = ({ user, onSelectGroup, theme, setTheme }) => {
     const [groups, setGroups] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -226,6 +233,10 @@ const GroupHub = ({ user, onSelectGroup, onLogout, theme, setTheme }) => {
     const [deleteConfirmation, setDeleteConfirmation] = useState(null);
 
     useEffect(() => {
+        if (!user || !user.username) {
+            setIsLoading(false);
+            return;
+        }
         const groupsRef = collection(db, `/artifacts/${appId}/public/data/groups`);
         const q = query(groupsRef, where("members", "array-contains", user.username));
 
@@ -239,7 +250,11 @@ const GroupHub = ({ user, onSelectGroup, onLogout, theme, setTheme }) => {
         });
 
         return () => unsubscribe();
-    }, [user.username]);
+    }, [user]);
+
+    const handleLogout = async () => {
+        await signOut(auth);
+    };
 
     const handleDeleteConfirm = async () => {
         if (!deleteConfirmation) return;
@@ -269,7 +284,7 @@ const GroupHub = ({ user, onSelectGroup, onLogout, theme, setTheme }) => {
                     <Logo />
                     <div className="flex items-center space-x-4">
                         <ThemeToggle theme={theme} setTheme={setTheme} />
-                        <button onClick={onLogout} className="bg-gray-200 dark:bg-gray-700 hover:bg-red-500 hover:text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors">
+                        <button onClick={handleLogout} className="bg-gray-200 dark:bg-gray-700 hover:bg-red-500 hover:text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors">
                             <LogOut className="w-5 h-5 sm:mr-2" /> <span className="hidden sm:inline">Logout</span>
                         </button>
                     </div>
@@ -331,7 +346,7 @@ const GroupHub = ({ user, onSelectGroup, onLogout, theme, setTheme }) => {
     );
 };
 
-// --- Dashboard & Expense Components ---
+// --- Dashboard & Expense Components (Unchanged from previous version) ---
 
 const AddMemberModal = ({ group, onClose, onMemberAdded }) => {
     const [name, setName] = useState('');
@@ -691,10 +706,11 @@ export default function App() {
                     setUser(currentUser);
                     setUsername(userDoc.data().username);
                 } else {
-                    setUser(null);
+                    await signOut(auth);
                 }
             } else {
                 setUser(null);
+                setUsername('');
                 setSelectedGroupId(null);
             }
             setIsLoading(false);
@@ -731,11 +747,6 @@ export default function App() {
         };
     }, [selectedGroupId]);
 
-    const handleLogin = (loggedInUser, name) => {
-        setUser(loggedInUser);
-        setUsername(name);
-    };
-
     const handleAddExpense = async (expenseData) => {
         if (!selectedGroupId) return;
         try {
@@ -751,20 +762,18 @@ export default function App() {
         }
     };
 
-    const handleLogout = async () => {
-        await auth.signOut();
-    };
-
     if (isLoading) {
         return <div className="min-h-screen bg-gray-900 flex justify-center items-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>;
     }
 
     if (!user) {
-        return <LoginScreen onLogin={handleLogin} />;
+        return <LoginScreen />;
     }
 
+
+
     if (!selectedGroupId || !groupData) {
-        return <GroupHub user={{uid: user.uid, username}} onSelectGroup={setSelectedGroupId} onLogout={handleLogout} theme={theme} setTheme={setTheme} />;
+        return <GroupHub user={{uid: user.uid, username}} onSelectGroup={setSelectedGroupId} onLogout={() => signOut(auth)} theme={theme} setTheme={setTheme} />;
     }
 
     return <Dashboard group={groupData} expenses={expenses} onAddExpense={handleAddExpense} onBack={() => setSelectedGroupId(null)} theme={theme} setTheme={setTheme} />;
