@@ -9,8 +9,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined'
     ? JSON.parse(__firebase_config) 
     : { apiKey: "your-fallback-api-key", authDomain: "...", projectId: "..." };
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-splitwise-app';
-
+const appId = process.env.REACT_APP_PROJECT_ID;
 
 // --- Firebase Initialization ---
 const app = initializeApp(firebaseConfig);
