@@ -5,7 +5,6 @@ import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serv
 import { ArrowRight, Users, IndianRupee, LogOut, PlusCircle, Trash2, Sun, Moon, Eye, X, UserPlus, Receipt, History } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// Reverted to the method compatible with this preview environment.
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
     ? JSON.parse(__firebase_config) 
     : { apiKey: "your-fallback-api-key", authDomain: "...", projectId: "..." };
@@ -94,33 +93,9 @@ const ThemeToggle = ({ theme, setTheme }) => {
 // --- Main Application Components ---
 
 const LoginScreen = () => {
-    const [loginMethod, setLoginMethod] = useState(null); // 'guest' or 'google'
-    const [username, setUsername] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const handleGuestLogin = async (e) => {
-        if (e) e.preventDefault();
-        if (!username.trim()) {
-            alert("Please enter a username.");
-            return;
-        }
-        setIsLoading(true);
-        try {
-            const credential = typeof __initial_auth_token !== 'undefined' && __initial_auth_token
-                ? await signInWithCustomToken(auth, __initial_auth_token)
-                : await signInAnonymously(auth);
-            
-            const user = credential.user;
-            const userDocRef = doc(db, `/artifacts/${appId}/public/data/users`, user.uid);
-            await setDoc(userDocRef, { username: username.trim(), uid: user.uid });
-        } catch (error) {
-            console.error("Guest login failed:", error);
-            setError("Failed to sign in as guest. Please try again.");
-            setIsLoading(false);
-        }
-    };
-    
     const handleGoogleLogin = async () => {
         setIsLoading(true);
         setError('');
@@ -137,7 +112,11 @@ const LoginScreen = () => {
             }, { merge: true });
         } catch (error) {
             console.error("Google login failed:", error);
-            setError("Failed to sign in with Google. Please try again.");
+            if (error.code === 'auth/unauthorized-domain') {
+                 setError("Google Sign-In is not enabled for this preview environment, but it will work on your live website.");
+            } else {
+                setError("Failed to sign in with Google. Please try again.");
+            }
             setIsLoading(false);
         }
     };
@@ -150,47 +129,15 @@ const LoginScreen = () => {
                     <p className="text-gray-500 dark:text-gray-400 mt-2">The simplest way to split expenses.</p>
                 </div>
                 <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700">
-                    {!loginMethod ? (
-                        <>
-                            <h2 className="text-2xl font-bold mb-6">Join or Sign In</h2>
-                            <div className="space-y-4">
-                                <button
-                                    onClick={handleGoogleLogin}
-                                    disabled={isLoading}
-                                    className="w-full bg-white dark:bg-gray-700 text-gray-800 dark:text-white font-bold py-3 px-4 rounded-lg flex justify-center items-center transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
-                                >
-                                    {isLoading ? <Spinner /> : <><GoogleLogo /> Sign in with Google</>}
-                                </button>
-                                <button
-                                    onClick={() => setLoginMethod('guest')}
-                                    className="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-lg flex justify-center items-center transition-all duration-300 transform hover:scale-105"
-                                >
-                                    Sign in as a Guest
-                                </button>
-                            </div>
-                        </>
-                    ) : (
-                        <form onSubmit={handleGuestLogin}>
-                            <h2 className="text-2xl font-bold mb-6">Enter Your Guest Name</h2>
-                            <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                placeholder="Your Name"
-                                className="w-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white px-4 py-3 rounded-lg mb-6 focus:outline-none focus:ring-2 focus:ring-green-500 transition"
-                            />
-                            <button
-                                type="submit"
-                                disabled={isLoading}
-                                className="w-full bg-gradient-to-r from-green-500 to-blue-600 hover:from-green-600 hover:to-blue-700 text-white font-bold py-3 px-4 rounded-lg flex justify-center items-center transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {isLoading ? <Spinner /> : "Continue"}
-                            </button>
-                             <button type="button" onClick={() => setLoginMethod(null)} className="text-sm text-gray-500 hover:underline mt-4">
-                                &larr; Back to sign in options
-                            </button>
-                        </form>
-                    )}
+                    <h2 className="text-2xl font-bold mb-6">Welcome!</h2>
+                    <p className="text-gray-600 dark:text-gray-400 mb-8">Sign in to manage your shared expenses.</p>
+                    <button
+                        onClick={handleGoogleLogin}
+                        disabled={isLoading}
+                        className="w-full bg-white dark:bg-gray-700 text-gray-800 dark:text-white font-bold py-3 px-4 rounded-lg flex justify-center items-center transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                    >
+                        {isLoading ? <Spinner /> : <><GoogleLogo /> Sign in with Google</>}
+                    </button>
                     {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
                 </div>
             </div>
@@ -748,19 +695,20 @@ export default function App() {
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
                 const userDocRef = doc(db, `/artifacts/${appId}/public/data/users`, currentUser.uid);
-                const userDoc = await getDoc(userDocRef);
-                if (userDoc.exists()) {
-                    setUser(currentUser);
-                    setUsername(userDoc.data().username);
-                } else {
-                    await signOut(auth);
-                }
+                const unsubDoc = onSnapshot(userDocRef, (userDoc) => {
+                    if (userDoc.exists()) {
+                        setUser(currentUser);
+                        setUsername(userDoc.data().username);
+                        setIsLoading(false);
+                    }
+                });
+                return () => unsubDoc();
             } else {
                 setUser(null);
                 setUsername('');
                 setSelectedGroupId(null);
+                setIsLoading(false);
             }
-            setIsLoading(false);
         });
         return () => unsubscribe();
     }, []);
@@ -820,7 +768,7 @@ export default function App() {
 
 
     if (!selectedGroupId || !groupData) {
-        return <GroupHub user={{uid: user.uid, username}} onSelectGroup={setSelectedGroupId} onLogout={() => signOut(auth)} theme={theme} setTheme={setTheme} />;
+        return <GroupHub user={{uid: user.uid, username}} onSelectGroup={setSelectedGroupId} theme={theme} setTheme={setTheme} />;
     }
 
     return <Dashboard group={groupData} expenses={expenses} onAddExpense={handleAddExpense} onBack={() => setSelectedGroupId(null)} theme={theme} setTheme={setTheme} />;
