@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, query, where, getDocs, writeBatch, deleteDoc, updateDoc, arrayUnion, orderBy } from 'firebase/firestore';
-import { ArrowRight, Users, IndianRupee, LogOut, PlusCircle, Trash2, Sun, Moon, Eye, X, UserPlus, Receipt, History, AlertTriangle, CheckCircle } from 'lucide-react';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, query, where, getDocs, writeBatch, deleteDoc, updateDoc, arrayUnion, orderBy, arrayRemove } from 'firebase/firestore';
+import { ArrowRight, Users, IndianRupee, LogOut, PlusCircle, Trash2, Sun, Moon, Eye, X, UserPlus, Receipt, History, AlertTriangle, CheckCircle, UserX } from 'lucide-react';
 
 // --- Firebase Configuration for Vercel ---
 const firebaseConfig = {
@@ -39,10 +39,16 @@ const GoogleLogo = () => (
 
 const Logo = () => (
     <div className="flex items-center space-x-3">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-9 h-9 sm:w-10 sm:h-10">
-            <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2Z" className="stroke-blue-500" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M16 12H8" className="stroke-green-500" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M12 16V8" className="stroke-green-500" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+         <svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-9 h-9 sm:w-10 sm:h-10">
+            <defs>
+                <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style={{stopColor: '#34D399', stopOpacity: 1}} />
+                    <stop offset="100%" style={{stopColor: '#3B82F6', stopOpacity: 1}} />
+                </linearGradient>
+            </defs>
+            <path d="M50 2 A 48 48 0 0 0 50 98 A 48 48 0 0 0 50 2 Z M 50 10 A 40 40 0 0 1 50 90 A 40 40 0 0 1 50 10 Z" fill="url(#logoGradient)"/>
+            <path d="M25 50 L75 50" stroke="white" strokeWidth="6" strokeLinecap="round"/>
+            <path d="M50 25 L50 75" stroke="white" strokeWidth="6" strokeLinecap="round" transform="rotate(45 50 50)"/>
         </svg>
         <span className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">Split Smarter</span>
     </div>
@@ -99,7 +105,7 @@ const ThemeToggle = ({ theme, setTheme }) => {
 };
 
 const UserAvatar = ({ name }) => {
-    const getInitials = (name) => {
+    const getInitials = (name = '') => {
         const names = name.split(' ');
         if (names.length > 1) {
             return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
@@ -107,7 +113,7 @@ const UserAvatar = ({ name }) => {
         return name.substring(0, 2).toUpperCase();
     };
 
-    const getColor = (name) => {
+    const getColor = (name = '') => {
         const colors = ['bg-red-500', 'bg-green-500', 'bg-blue-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500'];
         let hash = 0;
         for (let i = 0; i < name.length; i++) {
@@ -117,7 +123,7 @@ const UserAvatar = ({ name }) => {
     };
 
     return (
-        <div className={`w-10 h-10 rounded-full ${getColor(name)} flex items-center justify-center text-white font-bold text-sm`}>
+        <div className={`w-10 h-10 rounded-full ${getColor(name)} flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
             {getInitials(name)}
         </div>
     );
@@ -151,7 +157,7 @@ const LoginScreen = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white flex flex-col justify-center items-center p-4">
+        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white flex flex-col justify-center items-center p-4 transition-colors duration-500">
             <div className="w-full max-w-sm text-center">
                 <div className="mb-8">
                     <Logo />
@@ -301,7 +307,7 @@ const GroupHub = ({ user, onSelectGroup, theme, setTheme }) => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white p-4 sm:p-6 lg:p-8">
+        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white p-4 sm:p-6 lg:p-8 transition-colors duration-500">
             <div className="max-w-4xl mx-auto">
                 <header className="flex justify-between items-center mb-8">
                     <Logo />
@@ -549,9 +555,11 @@ const AddDirectPaymentModal = ({ members, onAddPayment, onClose }) => {
 };
 
 
-const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme }) => {
+const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme, user }) => {
     const [activeModal, setActiveModal] = useState(null);
     const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+    const [deleteConfirmation, setDeleteConfirmation] = useState(null); // For expenses
+    const [removeMemberConfirmation, setRemoveMemberConfirmation] = useState(null); // For members
 
     const totalExpense = useMemo(() => {
         return expenses
@@ -629,8 +637,42 @@ const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme }) =
         });
     };
 
+    const handleDeleteExpense = async () => {
+        if (!deleteConfirmation) return;
+        const expenseId = deleteConfirmation;
+        setDeleteConfirmation(null);
+        try {
+            const expenseDocRef = doc(db, `/artifacts/${appId}/public/data/groups/${group.id}/expenses`, expenseId);
+            await deleteDoc(expenseDocRef);
+        } catch (error) {
+            console.error("Error deleting expense:", error);
+            alert("Failed to delete expense.");
+        }
+    };
+
+    const handleRemoveMember = async () => {
+        if (!removeMemberConfirmation) return;
+        const memberName = removeMemberConfirmation;
+        setRemoveMemberConfirmation(null);
+
+        if (Math.abs(balances[memberName]) > 0.01) {
+            alert(`${memberName} cannot be removed because they have an outstanding balance.`);
+            return;
+        }
+
+        try {
+            const groupDocRef = doc(db, `/artifacts/${appId}/public/data/groups`, group.id);
+            await updateDoc(groupDocRef, {
+                members: arrayRemove(memberName)
+            });
+        } catch (error) {
+            console.error("Error removing member:", error);
+            alert("Failed to remove member.");
+        }
+    };
+
     return (
-        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white p-4 sm:p-6 lg:p-8">
+        <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white p-4 sm:p-6 lg:p-8 transition-colors duration-500">
             <div className="max-w-5xl mx-auto">
                 <header className="flex justify-between items-center mb-2">
                     <h1 className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">{group.name}</h1>
@@ -663,14 +705,21 @@ const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme }) =
                         <h2 className="text-2xl font-bold mb-4 flex items-center"><Users className="mr-3"/>Balances</h2>
                         <ul className="space-y-3">
                             {Object.entries(balances).map(([name, balance]) => (
-                                <li key={name} className="flex justify-between items-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                <li key={name} className="flex justify-between items-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg group">
                                     <div className="flex items-center">
                                         <UserAvatar name={name} />
                                         <span className="font-medium ml-3">{name}</span>
                                     </div>
-                                    <span className={`font-bold ${balance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                        {balance >= 0 ? 'Gets back' : 'Owes'} ₹{Math.abs(balance).toFixed(2)}
-                                    </span>
+                                    <div className="flex items-center">
+                                        <span className={`font-bold mr-4 ${balance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                            {balance >= 0 ? 'Gets back' : 'Owes'} ₹{Math.abs(balance).toFixed(2)}
+                                        </span>
+                                        {user.uid === group.createdBy && name !== user.username && (
+                                            <button onClick={() => setRemoveMemberConfirmation(name)} className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-400">
+                                                <UserX className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </li>
                             ))}
                         </ul>
@@ -706,15 +755,27 @@ const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme }) =
                     {expenses.length > 0 ? (
                         <ul className="space-y-3 max-h-96 overflow-y-auto pr-2">
                             {expenses.map(exp => (
-                                <li key={exp.id} className="flex justify-between items-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                    <div>
-                                        <p className="font-bold">{exp.description}</p>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                                            {exp.type === 'group' ? `Paid by ${exp.paidBy}` : `${exp.paidBy} paid ${exp.paidTo}`}
-                                            {exp.createdAt && ` on ${exp.createdAt.toDate().toLocaleDateString()}`}
-                                        </p>
+                                <li key={exp.id} className="flex justify-between items-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg group">
+                                    <div className="flex items-center">
+                                        <div className="flex-shrink-0 mr-4">
+                                            {exp.type === 'direct' ? <CheckCircle className="w-8 h-8 text-blue-500" /> : <UserAvatar name={exp.paidBy} />}
+                                        </div>
+                                        <div>
+                                            <p className="font-bold">{exp.description}</p>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                {exp.type === 'group' ? `Paid by ${exp.paidBy}` : `${exp.paidBy} paid ${exp.paidTo}`}
+                                                {exp.createdAt && ` on ${exp.createdAt.toDate().toLocaleDateString()}`}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <span className={`font-bold text-lg ${exp.type === 'direct' ? 'text-blue-500' : 'text-gray-800 dark:text-white'}`}>₹{exp.amount.toFixed(2)}</span>
+                                    <div className="flex items-center">
+                                        <span className={`font-bold text-lg mr-4 ${exp.type === 'direct' ? 'text-blue-500' : 'text-gray-800 dark:text-white'}`}>₹{exp.amount.toFixed(2)}</span>
+                                        {exp.createdBy === user.uid && (
+                                            <button onClick={() => setDeleteConfirmation(exp.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-400">
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
                                 </li>
                             ))}
                         </ul>
@@ -727,6 +788,22 @@ const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme }) =
             {activeModal === 'groupExpense' && <AddExpenseModal members={group.members} onAddExpense={onAddExpense} onClose={() => setActiveModal(null)} />}
             {activeModal === 'directPayment' && <AddDirectPaymentModal members={group.members} onAddPayment={onAddExpense} onClose={() => setActiveModal(null)} />}
             {showAddMemberModal && <AddMemberModal group={group} onMemberAdded={handleMemberAdded} onClose={() => setShowAddMemberModal(false)} />}
+            {deleteConfirmation && (
+                <ConfirmationModal 
+                    title="Delete Expense"
+                    message="Are you sure you want to permanently delete this expense?"
+                    onConfirm={handleDeleteExpense}
+                    onCancel={() => setDeleteConfirmation(null)}
+                />
+            )}
+            {removeMemberConfirmation && (
+                <ConfirmationModal 
+                    title="Remove Member"
+                    message={`Are you sure you want to remove ${removeMemberConfirmation} from the group?`}
+                    onConfirm={handleRemoveMember}
+                    onCancel={() => setRemoveMemberConfirmation(null)}
+                />
+            )}
         </div>
     );
 };
@@ -839,5 +916,5 @@ export default function App() {
         return <GroupHub user={{uid: user.uid, username}} onSelectGroup={setSelectedGroupId} theme={theme} setTheme={setTheme} />;
     }
 
-    return <Dashboard group={groupData} expenses={expenses} onAddExpense={handleAddExpense} onBack={() => setSelectedGroupId(null)} theme={theme} setTheme={setTheme} />;
+    return <Dashboard group={groupData} expenses={expenses} onAddExpense={handleAddExpense} onBack={() => setSelectedGroupId(null)} theme={theme} setTheme={setTheme} user={user} />;
 }
