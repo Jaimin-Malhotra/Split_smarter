@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, query, where, getDocs, writeBatch, deleteDoc, updateDoc, arrayUnion, orderBy } from 'firebase/firestore';
-import { ArrowRight, Users, IndianRupee, LogOut, PlusCircle, Trash2, Sun, Moon, Eye, X, UserPlus, Receipt, History, AlertTriangle } from 'lucide-react';
+import { ArrowRight, Users, IndianRupee, LogOut, PlusCircle, Trash2, Sun, Moon, Eye, X, UserPlus, Receipt, History, AlertTriangle, CheckCircle } from 'lucide-react';
 
 // --- Firebase Configuration for Vercel ---
 const firebaseConfig = {
@@ -40,11 +40,9 @@ const GoogleLogo = () => (
 const Logo = () => (
     <div className="flex items-center space-x-3">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-9 h-9 sm:w-10 sm:h-10">
-            <circle cx="12" cy="12" r="10" className="stroke-blue-500" strokeWidth="2"/>
-            <path d="M9 15L15 9" className="stroke-green-500" strokeWidth="2" strokeLinecap="round"/>
-            <path d="M15 15L9 9" className="stroke-green-500" strokeWidth="2" strokeLinecap="round"/>
-            <path d="M12 2.5V6" className="stroke-blue-500" strokeWidth="2" strokeLinecap="round"/>
-            <path d="M12 18V21.5" className="stroke-blue-500" strokeWidth="2" strokeLinecap="round"/>
+            <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2Z" className="stroke-blue-500" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M16 12H8" className="stroke-green-500" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 16V8" className="stroke-green-500" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
         <span className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">Split Smarter</span>
     </div>
@@ -97,6 +95,31 @@ const ThemeToggle = ({ theme, setTheme }) => {
         <button onClick={toggleTheme} className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
             {theme === 'dark' ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
         </button>
+    );
+};
+
+const UserAvatar = ({ name }) => {
+    const getInitials = (name) => {
+        const names = name.split(' ');
+        if (names.length > 1) {
+            return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+        }
+        return name.substring(0, 2).toUpperCase();
+    };
+
+    const getColor = (name) => {
+        const colors = ['bg-red-500', 'bg-green-500', 'bg-blue-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500'];
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) {
+            hash = name.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        return colors[Math.abs(hash % colors.length)];
+    };
+
+    return (
+        <div className={`w-10 h-10 rounded-full ${getColor(name)} flex items-center justify-center text-white font-bold text-sm`}>
+            {getInitials(name)}
+        </div>
     );
 };
 
@@ -329,7 +352,10 @@ const GroupHub = ({ user, onSelectGroup, theme, setTheme }) => {
                 <Modal onClose={() => setShowMembersModal(null)} title="Group Members">
                     <ul className="space-y-2">
                         {showMembersModal.map(member => (
-                            <li key={member} className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-800 dark:text-white">{member}</li>
+                            <li key={member} className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-800 dark:text-white flex items-center">
+                                <UserAvatar name={member} />
+                                <span className="ml-4">{member}</span>
+                            </li>
                         ))}
                     </ul>
                 </Modal>
@@ -537,16 +563,17 @@ const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme }) =
         const currentBalances = group.members.reduce((acc, member) => ({ ...acc, [member]: 0 }), {});
         
         expenses.forEach(expense => {
-            if (expense.type === 'group') {
+            if (expense.type === 'group' || expense.type === 'direct') {
                 if(currentBalances[expense.paidBy] !== undefined) currentBalances[expense.paidBy] += expense.amount;
-                for (const participant in expense.splits) {
-                    if(currentBalances[participant] !== undefined) {
-                      currentBalances[participant] -= expense.splits[participant];
+                if(expense.type === 'group') {
+                    for (const participant in expense.splits) {
+                        if(currentBalances[participant] !== undefined) {
+                          currentBalances[participant] -= expense.splits[participant];
+                        }
                     }
+                } else { // direct payment
+                    if(currentBalances[expense.paidTo] !== undefined) currentBalances[expense.paidTo] -= expense.amount;
                 }
-            } else if (expense.type === 'direct') {
-                if(currentBalances[expense.paidBy] !== undefined) currentBalances[expense.paidBy] += expense.amount;
-                if(currentBalances[expense.paidTo] !== undefined) currentBalances[expense.paidTo] -= expense.amount;
             }
         });
         return currentBalances;
@@ -591,6 +618,16 @@ const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme }) =
             members: arrayUnion(name)
         });
     };
+    
+    const handleSettleUp = (debt) => {
+        onAddExpense({
+            description: `Settlement: ${debt.from} to ${debt.to}`,
+            amount: debt.amount,
+            paidBy: debt.from,
+            paidTo: debt.to,
+            type: 'direct'
+        });
+    };
 
     return (
         <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-white p-4 sm:p-6 lg:p-8">
@@ -627,7 +664,10 @@ const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme }) =
                         <ul className="space-y-3">
                             {Object.entries(balances).map(([name, balance]) => (
                                 <li key={name} className="flex justify-between items-center p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                    <span className="font-medium">{name}</span>
+                                    <div className="flex items-center">
+                                        <UserAvatar name={name} />
+                                        <span className="font-medium ml-3">{name}</span>
+                                    </div>
                                     <span className={`font-bold ${balance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                                         {balance >= 0 ? 'Gets back' : 'Owes'} ₹{Math.abs(balance).toFixed(2)}
                                     </span>
@@ -643,10 +683,17 @@ const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme }) =
                             <ul className="space-y-4">
                                 {simplifiedDebts.map((debt, i) => (
                                     <li key={i} className="flex items-center flex-wrap justify-between p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                                        <span className="font-bold text-red-500">{debt.from}</span>
-                                        <ArrowRight className="text-gray-500 mx-2 sm:mx-4"/>
-                                        <span className="font-bold text-green-500">{debt.to}</span>
-                                        <span className="ml-auto font-mono text-lg">₹{debt.amount.toFixed(2)}</span>
+                                        <div className="flex items-center">
+                                            <UserAvatar name={debt.from} />
+                                            <span className="font-bold text-red-500 ml-3">{debt.from}</span>
+                                            <ArrowRight className="text-gray-500 mx-2 sm:mx-4"/>
+                                            <UserAvatar name={debt.to} />
+                                            <span className="font-bold text-green-500 ml-3">{debt.to}</span>
+                                        </div>
+                                        <div className="flex items-center mt-2 sm:mt-0">
+                                            <span className="font-mono text-lg mr-4">₹{debt.amount.toFixed(2)}</span>
+                                            <button onClick={() => handleSettleUp(debt)} className="bg-green-500 text-white px-3 py-1 rounded-lg text-sm font-bold hover:bg-green-600 transition-colors">Settle Up</button>
+                                        </div>
                                     </li>
                                 ))}
                             </ul>
@@ -667,7 +714,7 @@ const Dashboard = ({ group, expenses, onAddExpense, onBack, theme, setTheme }) =
                                             {exp.createdAt && ` on ${exp.createdAt.toDate().toLocaleDateString()}`}
                                         </p>
                                     </div>
-                                    <span className="font-bold text-lg">₹{exp.amount.toFixed(2)}</span>
+                                    <span className={`font-bold text-lg ${exp.type === 'direct' ? 'text-blue-500' : 'text-gray-800 dark:text-white'}`}>₹{exp.amount.toFixed(2)}</span>
                                 </li>
                             ))}
                         </ul>
@@ -698,6 +745,10 @@ export default function App() {
     }, [theme]);
 
     useEffect(() => {
+        if (!firebaseKeysLoaded) {
+            setIsLoading(false);
+            return;
+        }
         const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
             if (currentUser) {
                 const userDocRef = doc(db, `/artifacts/${appId}/public/data/users`, currentUser.uid);
@@ -720,7 +771,7 @@ export default function App() {
     }, []);
     
     useEffect(() => {
-        if (!selectedGroupId) {
+        if (!selectedGroupId || !firebaseKeysLoaded) {
             setGroupData(null);
             setExpenses([]);
             return;
