@@ -39,16 +39,8 @@ const GoogleLogo = () => (
 
 const Logo = () => (
     <div className="flex items-center space-x-3">
-         <svg width="40" height="40" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" className="w-9 h-9 sm:w-10 sm:h-10">
-            <defs>
-                <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style={{stopColor: '#34D399', stopOpacity: 1}} />
-                    <stop offset="100%" style={{stopColor: '#3B82F6', stopOpacity: 1}} />
-                </linearGradient>
-            </defs>
-            <path d="M50 2 A 48 48 0 0 0 50 98 A 48 48 0 0 0 50 2 Z M 50 10 A 40 40 0 0 1 50 90 A 40 40 0 0 1 50 10 Z" fill="url(#logoGradient)"/>
-            <path d="M25 50 L75 50" stroke="white" strokeWidth="6" strokeLinecap="round"/>
-            <path d="M50 25 L50 75" stroke="white" strokeWidth="6" strokeLinecap="round" transform="rotate(45 50 50)"/>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-9 h-9 sm:w-10 sm:h-10 text-gray-800 dark:text-white">
+            <path d="M12 21V13.5M12 13.5L16.5 9M12 13.5L7.5 9M12 3V7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
         <span className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">Split Smarter</span>
     </div>
