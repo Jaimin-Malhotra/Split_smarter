@@ -1,20 +1,31 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInAnonymously, signOut, signInWithCustomToken, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, query, where, getDocs, writeBatch, deleteDoc, updateDoc, arrayUnion, orderBy } from 'firebase/firestore';
-import { ArrowRight, Users, IndianRupee, LogOut, PlusCircle, Trash2, Sun, Moon, Eye, X, UserPlus, Receipt, History } from 'lucide-react';
+import { ArrowRight, Users, IndianRupee, LogOut, PlusCircle, Trash2, Sun, Moon, Eye, X, UserPlus, Receipt, History, AlertTriangle } from 'lucide-react';
 
-// --- Firebase Configuration ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-    ? JSON.parse(__firebase_config) 
-    : { apiKey: "your-fallback-api-key", authDomain: "...", projectId: "..." };
+// --- Firebase Configuration for Vercel ---
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_API_KEY,
+  authDomain: process.env.REACT_APP_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_APP_ID
+};
 
-const appId = process.env.REACT_APP_PROJECT_ID;
+// --- CRITICAL: Check if Firebase keys are loaded ---
+const firebaseKeysLoaded = firebaseConfig.apiKey && firebaseConfig.projectId;
 
-// --- Firebase Initialization ---
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+const appId = 'split-smarter-live'; // Use a consistent ID for database paths
+
+// --- Firebase Initialization (only if keys are present) ---
+let app, auth, db;
+if (firebaseKeysLoaded) {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+}
 
 // --- Helper & UI Components ---
 const GoogleLogo = () => (
@@ -111,11 +122,7 @@ const LoginScreen = () => {
             }, { merge: true });
         } catch (error) {
             console.error("Google login failed:", error);
-            if (error.code === 'auth/unauthorized-domain') {
-                 setError("Google Sign-In is not enabled for this preview environment, but it will work on your live website.");
-            } else {
-                setError("Failed to sign in with Google. Please try again.");
-            }
+            setError("Failed to sign in with Google. Please try again.");
             setIsLoading(false);
         }
     };
@@ -758,6 +765,17 @@ export default function App() {
 
     if (isLoading) {
         return <div className="min-h-screen bg-gray-900 flex justify-center items-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>;
+    }
+
+    if (!firebaseKeysLoaded) {
+        return (
+            <div className="min-h-screen bg-red-100 text-red-800 flex flex-col justify-center items-center p-4 text-center">
+                <AlertTriangle className="w-16 h-16 text-red-500 mb-4" />
+                <h1 className="text-2xl font-bold mb-2">Configuration Error</h1>
+                <p>The Firebase configuration keys are missing.</p>
+                <p className="mt-2 text-sm">This app cannot connect to the database. If you are the developer, please ensure your Vercel Environment Variables are set correctly.</p>
+            </div>
+        );
     }
 
     if (!user) {
